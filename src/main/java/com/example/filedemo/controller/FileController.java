@@ -46,7 +46,7 @@ public class FileController {
     }
 
     @PostMapping("/uploadMultipleFiles/{msisdn}")
-    public ResponseEntity<List<UploadFileResponse>> uploadMultipleFiles(@PathVariable("msisdn") String msisdn, @NotNull @RequestParam("files") MultipartFile[] files) {
+    public ResponseEntity<List<UploadFileResponse>> uploadMultipleFiles(@PathVariable("msisdn") String msisdn, @NotNull @RequestParam("files") MultipartFile[] files) throws IOException {
         List<UploadFileResponse> responseList = fileStorageService.uploadFiles(msisdn, files);
         return ResponseEntity.ok(responseList);
     }
