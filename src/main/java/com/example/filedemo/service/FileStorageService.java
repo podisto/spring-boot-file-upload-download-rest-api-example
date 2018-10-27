@@ -4,7 +4,6 @@ import com.example.filedemo.exception.FileStorageException;
 import com.example.filedemo.exception.MyFileNotFoundException;
 import com.example.filedemo.payload.UploadFile;
 import com.example.filedemo.property.FileStorageProperties;
-import com.example.filedemo.repository.UploadFileRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
@@ -40,7 +39,6 @@ public class FileStorageService {
     }
 
     public String storeFile(MultipartFile file) {
-        // Normalize file name
         String fileName = StringUtils.cleanPath(file.getOriginalFilename());
         // Check if the file's name contains invalid characters
         if(fileName.contains("..")) {
@@ -49,9 +47,8 @@ public class FileStorageService {
         if (getExtensionByStringHandling(fileName).isPresent()) {
             try {
                 String serverFileName = Calendar.getInstance().getTimeInMillis() + "." +this.getExtensionByStringHandling(fileName).get();
-                // Copy file to the target location (Replacing existing file with the same name)
+                // Copy file to the target location
                 Path targetLocation = this.fileStorageLocation.resolve(serverFileName);
-                log.info("TargetLocation: {}", targetLocation);
                 Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
                 uploadFileService.save(this.buildUploadFile(file, serverFileName, targetLocation.toString()));
                 return serverFileName;
