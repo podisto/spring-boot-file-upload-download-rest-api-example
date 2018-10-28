@@ -5,6 +5,7 @@ import com.example.filedemo.service.FileStorageService;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -16,7 +17,7 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import javax.servlet.http.HttpServletRequest;
 import javax.validation.constraints.NotNull;
 import java.io.IOException;
-import java.util.List;
+import java.util.Set;
 
 @RestController
 @Slf4j
@@ -25,9 +26,20 @@ public class FileController {
     private static final Logger logger = LoggerFactory.getLogger(FileController.class);
 
     private final FileStorageService fileStorageService;
+    @Value("${conform-size}")
+    private Integer conformSize;
 
     public FileController(FileStorageService fileStorageService) {
         this.fileStorageService = fileStorageService;
+    }
+
+    @PostMapping("/upload-multiple-files/{msisdn}")
+    public ResponseEntity<Set<UploadFileResponse>> uploadMultipleFiles(@PathVariable("msisdn") String msisdn, @NotNull @RequestParam("files") MultipartFile[] files) throws IOException {
+        Set<UploadFileResponse> responseList = fileStorageService.uploadFiles(msisdn, files);
+        if (responseList.size() == conformSize) {
+            fileStorageService.zip(msisdn);
+        }
+        return ResponseEntity.ok(responseList);
     }
 
     @PostMapping("/uploadFile/{msisdn}")
@@ -43,12 +55,6 @@ public class FileController {
         response.setFileDownloadUri(fileDownloadUri);
 
         return ResponseEntity.ok(response);
-    }
-
-    @PostMapping("/uploadMultipleFiles/{msisdn}")
-    public ResponseEntity<List<UploadFileResponse>> uploadMultipleFiles(@PathVariable("msisdn") String msisdn, @NotNull @RequestParam("files") MultipartFile[] files) throws IOException {
-        List<UploadFileResponse> responseList = fileStorageService.uploadFiles(msisdn, files);
-        return ResponseEntity.ok(responseList);
     }
 
     @GetMapping("/downloadFile/{fileName:.+}")

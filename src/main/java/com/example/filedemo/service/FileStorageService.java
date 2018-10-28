@@ -5,6 +5,7 @@ import com.example.filedemo.exception.MyFileNotFoundException;
 import com.example.filedemo.payload.UploadFile;
 import com.example.filedemo.payload.UploadFileResponse;
 import com.example.filedemo.property.FileStorageProperties;
+import com.example.filedemo.utils.Utils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
@@ -19,13 +20,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.Arrays;
-import java.util.Calendar;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
 
 @Service
 @Slf4j
@@ -33,13 +29,12 @@ public class FileStorageService {
 
     private final Path fileStorageLocation;
     private final UploadFileService uploadFileService;
-    private final Integer maxSize;
+    private static final String EXTENSION = ".zip";
 
     @Autowired
     public FileStorageService(FileStorageProperties fileStorageProperties, UploadFileService uploadFileService) {
         this.fileStorageLocation = Paths.get(fileStorageProperties.getUploadDir()).toAbsolutePath().normalize();
         this.uploadFileService = uploadFileService;
-        this.maxSize = Integer.valueOf(fileStorageProperties.getMaxSize());
         try {
             Files.createDirectories(this.fileStorageLocation);
         } catch (Exception ex) {
@@ -53,19 +48,16 @@ public class FileStorageService {
         if (fileName.contains("..")) {
             throw new FileStorageException("Sorry! Filename contains invalid path sequence " + fileName);
         }
-        if (this.getExtensionByStringHandling(fileName).isPresent()) {
-            try {
-                String serverFileName = Calendar.getInstance().getTimeInMillis() + "." + this.getExtensionByStringHandling(fileName).get();
-                // Copy file to the target location
-                Path targetLocation = this.createMsisdnDirectory(msisdn).resolve(serverFileName);
-                Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
-                uploadFileService.save(this.buildUploadFile(file, serverFileName, targetLocation.toString()));
-                return UploadFileResponse.builder().fileName(serverFileName).fileType(file.getContentType()).size(file.getSize()).build();
-            } catch (IOException ex) {
-                throw new FileStorageException("Could not store file " + fileName + ". Please try again!", ex);
-            }
-        } else {
-            throw new FileStorageException("Sorry! Filename does not contains valid extension" + fileName);
+        String extension = this.getExtensionByStringHandling(fileName).orElseThrow(() -> new FileStorageException("Sorry! Filename does not contains valid extension " + fileName));
+        try {
+            String serverFileName = Calendar.getInstance().getTimeInMillis() + "." + extension;
+            // Copy file to the target location
+            Path targetLocation = Paths.get(this.createMsisdnDirectory(msisdn)).resolve(serverFileName);
+            Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
+            uploadFileService.save(this.buildUploadFile(file, serverFileName, targetLocation.toString()));
+            return UploadFileResponse.builder().fileName(serverFileName).fileType(file.getContentType()).size(file.getSize()).build();
+        } catch (IOException ex) {
+            throw new FileStorageException("Could not store file " + fileName + ". Please try again!", ex);
         }
     }
 
@@ -89,40 +81,18 @@ public class FileStorageService {
                 .map(f -> f.substring(filename.lastIndexOf('.') + 1));
     }
 
-    public List<UploadFileResponse> uploadFiles(String msisdn, MultipartFile[] files) throws IOException {
-        log.info("maxSize: {}", this.maxSize);
-        List<UploadFileResponse> responseList = Arrays.asList(Optional.ofNullable(files).orElse(new MultipartFile[0]))
+    public Set<UploadFileResponse> uploadFiles(String msisdn, MultipartFile[] files) {
+       return Arrays.asList(Optional.ofNullable(files).orElse(new MultipartFile[0]))
                 .stream()
                 .map(file -> this.storeFile(msisdn, file))
-                .collect(Collectors.toList());
-        if (responseList.size() == this.maxSize) { // maxSize = 3
-            // process zip folder zipUploadedFile()
-            Path path = this.createMsisdnDirectory(msisdn);
-            String zipFilePath = path.toString().concat(".zip");
-            this.zipUploadedFile(path.toString(), zipFilePath);
-            log.info("file zipped successfully!");
-        }
-        return responseList;
+                .collect(Collectors.toSet());
     }
 
-    private void zipUploadedFile(String sourceDirectoryPath, String zipPath) throws IOException {
-        log.info("sourceDirectoryPath: {}, zipPath: {}", sourceDirectoryPath, zipPath);
-        Path p = Files.createFile(Paths.get(zipPath));
-        try (ZipOutputStream zs = new ZipOutputStream(Files.newOutputStream(p))) {
-            Path pp = Paths.get(sourceDirectoryPath);
-            Files.walk(pp)
-                    .filter(path -> !Files.isDirectory(path))
-                    .forEach(path -> {
-                        ZipEntry zipEntry = new ZipEntry(pp.relativize(path).toString());
-                        try {
-                            zs.putNextEntry(zipEntry);
-                            Files.copy(path, zs);
-                            zs.closeEntry();
-                        } catch (IOException e) {
-                            System.err.println(e);
-                        }
-                    });
-        }
+    public void zip(String msisdn) throws IOException {
+        String sourceDirectoryPath = this.createMsisdnDirectory(msisdn);
+        String zipPath = sourceDirectoryPath.concat(EXTENSION);
+        Utils.zip(sourceDirectoryPath, zipPath);
+        log.info("file zipped successfully!");
     }
 
     private UploadFile buildUploadFile(MultipartFile file, String serverFileName, String path) {
@@ -134,15 +104,15 @@ public class FileStorageService {
         return uploadFile;
     }
 
-    private Path createMsisdnDirectory(String msisdn) {
+    private String createMsisdnDirectory(String msisdn) {
         try {
             String directoryName = this.fileStorageLocation.toString().concat("/").concat(msisdn);
             Path path = Paths.get(directoryName);
-            if (!Files.exists(path)) {
+            if (!path.toFile().exists()) {
                 Files.createDirectory(path);
                 log.info("Directory created");
             }
-            return path;
+            return path.toString();
         } catch (IOException e) {
             throw new FileStorageException("Exception {} ", e);
         }

@@ -8,5 +8,4 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @Getter @Setter
 public class FileStorageProperties {
     private String uploadDir;
-    private String maxSize;
 }
